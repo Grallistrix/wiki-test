@@ -82,6 +82,7 @@ module.exports = {
           const strategy = require(`../modules/authentication/${stg.strategyKey}/authentication.js`)
 
           stg.config.callbackURL = `${WIKI.config.host}/login/${stg.key}/callback`
+          stg.config.key = stg.key;
           strategy.init(passport, stg.config)
           strategy.config = stg.config
 
@@ -122,7 +123,7 @@ module.exports = {
       }
 
       // Check if user / group is in revocation list
-      if (user && !mustRevalidate) {
+      if (user && !user.api && !mustRevalidate) {
         const uRevalidate = WIKI.auth.revocationList.get(`u${_.toString(user.id)}`)
         if (uRevalidate && user.iat < uRevalidate) {
           mustRevalidate = true
@@ -155,6 +156,9 @@ module.exports = {
           } else {
             res.cookie('jwt', newToken.token, { expires: DateTime.utc().plus({ days: 365 }).toJSDate() })
           }
+
+          // Avoid caching this response
+          res.set('Cache-Control', 'no-store')
         } catch (errc) {
           WIKI.logger.warn(errc)
           return next()
@@ -226,8 +230,13 @@ module.exports = {
       return false
     }
 
+    // Skip if no page rule to check
+    if (!page) {
+      return true
+    }
+
     // Check Page Rules
-    if (page && user.groups) {
+    if (user.groups) {
       let checkState = {
         deny: false,
         match: false,
@@ -236,6 +245,9 @@ module.exports = {
       user.groups.forEach(grp => {
         const grpId = _.isObject(grp) ? _.get(grp, 'id', 0) : grp
         _.get(WIKI.auth.groups, `${grpId}.pageRules`, []).forEach(rule => {
+          if (rule.locales && rule.locales.length > 0) {
+            if (!rule.locales.includes(page.locale)) { return }
+          }
           if (_.intersection(rule.roles, permissions).length > 0) {
             switch (rule.match) {
               case 'START':
@@ -279,6 +291,29 @@ module.exports = {
     }
 
     return false
+  },
+
+  /**
+   * Check for exclusive permissions (contain any X permission(s) but not any Y permission(s))
+   *
+   * @param {User} user
+   * @param {Array<String>} includePermissions
+   * @param {Array<String>} excludePermissions
+   */
+  checkExclusiveAccess(user, includePermissions = [], excludePermissions = []) {
+    const userPermissions = user.permissions ? user.permissions : user.getGlobalPermissions()
+
+    // Check Inclusion Permissions
+    if (_.intersection(userPermissions, includePermissions).length < 1) {
+      return false
+    }
+
+    // Check Exclusion Permissions
+    if (_.intersection(userPermissions, excludePermissions).length > 0) {
+      return false
+    }
+
+    return true
   },
 
   /**

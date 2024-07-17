@@ -10,7 +10,7 @@ const mustacheRegExp = /(\{|&#x7b;?){2}(.+?)(\}|&#x7d;?){2}/i
 
 module.exports = {
   async render() {
-    const $ = cheerio.load(this.input, {
+    let $ = cheerio.load(this.input, {
       decodeEntities: true
     })
 
@@ -50,7 +50,7 @@ module.exports = {
       }
 
       // -> Strip host from local links
-      if (isHostSet && href.indexOf(WIKI.config.host) === 0) {
+      if (isHostSet && href.indexOf(`${WIKI.config.host}/`) === 0) {
         href = href.replace(WIKI.config.host, '')
       }
 
@@ -201,10 +201,11 @@ module.exports = {
 
     let headers = []
     $('h1,h2,h3,h4,h5,h6').each((i, elm) => {
-      if ($(elm).attr('id')) {
-        return
-      }
       let headerSlug = uslug($(elm).text())
+      // -> If custom ID is defined, try to use that instead
+      if ($(elm).attr('id')) {
+        headerSlug = $(elm).attr('id')
+      }
 
       // -> Cannot start with a number (CSS selector limitation)
       if (headerSlug.match(/^\d/)) {
@@ -233,33 +234,24 @@ module.exports = {
     })
 
     // --------------------------------
-    // Wrap root text nodes
+    // Wrap non-empty root text nodes
     // --------------------------------
 
     $('body').contents().toArray().forEach(item => {
-      if (item.type === 'text' && item.parent.name === 'body') {
+      if (item && item.type === 'text' && item.parent.name === 'body' && item.data !== `\n` && item.data !== `\r`) {
         $(item).wrap('<div></div>')
       }
     })
 
     // --------------------------------
-    // Escape mustache expresions
+    // Wrap root table nodes
     // --------------------------------
 
-    function iterateMustacheNode (node) {
-      const list = $(node).contents().toArray()
-      list.forEach(item => {
-        if (item.type === 'text') {
-          const rawText = $(item).text()
-          if (mustacheRegExp.test(rawText)) {
-            $(item).parent().attr('v-pre', true)
-          }
-        } else {
-          iterateMustacheNode(item)
-        }
-      })
-    }
-    iterateMustacheNode($.root())
+    $('body').contents().toArray().forEach(item => {
+      if (item && item.name === 'table' && item.parent.name === 'body') {
+        $(item).wrap('<div class="table-container"></div>')
+      }
+    })
 
     // --------------------------------
     // STEP: POST
@@ -272,7 +264,37 @@ module.exports = {
       output = await renderer.init(output, child.config)
     }
 
-    return output
+    // --------------------------------
+    // Escape mustache expresions
+    // --------------------------------
+
+    $ = cheerio.load(output, {
+      decodeEntities: true
+    })
+
+    function iterateMustacheNode (node) {
+      $(node).contents().each((idx, item) => {
+        if (item && item.type === 'text') {
+          const rawText = $(item).text().replace(/\r?\n|\r/g, '')
+          if (mustacheRegExp.test(rawText)) {
+            if (!item.parent || item.parent.name === 'body') {
+              $(item).wrap($('<p>').attr('v-pre', true))
+            } else {
+              $(item).parent().attr('v-pre', true)
+            }
+          }
+        } else {
+          iterateMustacheNode(item)
+        }
+      })
+    }
+    iterateMustacheNode($.root())
+
+    $('pre').each((idx, elm) => {
+      $(elm).attr('v-pre', true)
+    })
+
+    return decodeEscape($.html('body').replace('<body>', '').replace('</body>', ''))
   }
 }
 

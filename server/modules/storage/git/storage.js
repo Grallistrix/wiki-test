@@ -1,5 +1,5 @@
 const path = require('path')
-const sgit = require('simple-git/promise')
+const sgit = require('simple-git')
 const fs = require('fs-extra')
 const _ = require('lodash')
 const stream = require('stream')
@@ -30,7 +30,7 @@ module.exports = {
     WIKI.logger.info('(STORAGE/GIT) Initializing...')
     this.repoPath = path.resolve(WIKI.ROOTPATH, this.config.localRepoPath)
     await fs.ensureDir(this.repoPath)
-    this.git = sgit(this.repoPath)
+    this.git = sgit(this.repoPath, { maxConcurrentProcesses: 1 })
 
     // Set custom binary path
     if (!_.isEmpty(this.config.gitBinaryPath)) {
@@ -44,6 +44,11 @@ module.exports = {
       WIKI.logger.info('(STORAGE/GIT) Initializing local repository...')
       await this.git.init()
     }
+
+    // Disable quotePath, color output
+    // Link https://git-scm.com/docs/git-config#Documentation/git-config.txt-corequotePath
+    await this.git.raw(['config', '--local', 'core.quotepath', false])
+    await this.git.raw(['config', '--local', 'color.ui', false])
 
     // Set default author
     await this.git.raw(['config', '--local', 'user.email', this.config.defaultEmail])
@@ -73,7 +78,7 @@ module.exports = {
               mode: 0o600
             })
           } catch (err) {
-            console.error(err)
+            WIKI.logger.error(err)
             throw err
           }
         }
@@ -114,7 +119,7 @@ module.exports = {
    * SYNC
    */
   async sync() {
-    const currentCommitLog = _.get(await this.git.log(['-n', '1', this.config.branch]), 'latest', {})
+    const currentCommitLog = _.get(await this.git.log(['-n', '1', this.config.branch, '--']), 'latest', {})
 
     const rootUser = await WIKI.models.users.getRootUser()
 
@@ -136,13 +141,29 @@ module.exports = {
 
     // Process Changes
     if (_.includes(['sync', 'pull'], this.mode)) {
-      const latestCommitLog = _.get(await this.git.log(['-n', '1', this.config.branch]), 'latest', {})
+      const latestCommitLog = _.get(await this.git.log(['-n', '1', this.config.branch, '--']), 'latest', {})
 
       const diff = await this.git.diffSummary(['-M', currentCommitLog.hash, latestCommitLog.hash])
       if (_.get(diff, 'files', []).length > 0) {
         let filesToProcess = []
+        const filePattern = /(.*?)(?:{(.*?))? => (?:(.*?)})?(.*)/
         for (const f of diff.files) {
-          const fPath = path.join(this.repoPath, f.file)
+          const fMatch = f.file.match(filePattern)
+          const fNames = {
+            old: null,
+            new: null
+          }
+          if (!fMatch) {
+            fNames.old = f.file
+            fNames.new = f.file
+          } else if (!fMatch[2] && !fMatch[3]) {
+            fNames.old = fMatch[1]
+            fNames.new = fMatch[4]
+          } else {
+            fNames.old = (fMatch[1] + fMatch[2] + fMatch[4]).replace('//', '/')
+            fNames.new = (fMatch[1] + fMatch[3] + fMatch[4]).replace('//', '/')
+          }
+          const fPath = path.join(this.repoPath, fNames.new)
           let fStats = { size: 0 }
           try {
             fStats = await fs.stat(fPath)
@@ -159,7 +180,8 @@ module.exports = {
               path: fPath,
               stats: fStats
             },
-            relPath: f.file
+            oldPath: fNames.old,
+            relPath: fNames.new
           })
         }
         await this.processFiles(filesToProcess, rootUser)
@@ -174,11 +196,25 @@ module.exports = {
   async processFiles(files, user) {
     for (const item of files) {
       const contentType = pageHelper.getContentType(item.relPath)
-      const fileExists = await fs.pathExists(item.file)
+      const fileExists = await fs.pathExists(item.file.path)
       if (!item.binary && contentType) {
         // -> Page
 
-        if (!fileExists && item.deletions > 0 && item.insertions === 0) {
+        if (fileExists && !item.importAll && item.relPath !== item.oldPath) {
+          // Page was renamed by git, so rename in DB
+          WIKI.logger.info(`(STORAGE/GIT) Page marked as renamed: from ${item.oldPath} to ${item.relPath}`)
+
+          const contentPath = pageHelper.getPagePath(item.oldPath)
+          const contentDestinationPath = pageHelper.getPagePath(item.relPath)
+          await WIKI.models.pages.movePage({
+            user: user,
+            path: contentPath.path,
+            destinationPath: contentDestinationPath.path,
+            locale: contentPath.locale,
+            destinationLocale: contentPath.locale,
+            skipStorage: true
+          })
+        } else if (!fileExists && !item.importAll && item.deletions > 0 && item.insertions === 0) {
           // Page was deleted by git, can safely mark as deleted in DB
           WIKI.logger.info(`(STORAGE/GIT) Page marked as deleted: ${item.relPath}`)
 
@@ -207,7 +243,23 @@ module.exports = {
       } else {
         // -> Asset
 
-        if (!fileExists && ((item.before > 0 && item.after === 0) || (item.deletions > 0 && item.insertions === 0))) {
+        if (fileExists && !item.importAll && ((item.before === item.after) || (item.deletions === 0 && item.insertions === 0))) {
+          // Asset was renamed by git, so rename in DB
+          WIKI.logger.info(`(STORAGE/GIT) Asset marked as renamed: from ${item.oldPath} to ${item.relPath}`)
+
+          const fileHash = assetHelper.generateHash(item.relPath)
+          const assetToRename = await WIKI.models.assets.query().findOne({ hash: fileHash })
+          if (assetToRename) {
+            await WIKI.models.assets.query().patch({
+              filename: item.relPath,
+              hash: fileHash
+            }).findById(assetToRename.id)
+            await assetToRename.deleteAssetCache()
+          } else {
+            WIKI.logger.info(`(STORAGE/GIT) Asset was not found in the DB, nothing to rename: ${item.relPath}`)
+          }
+          continue
+        } else if (!fileExists && !item.importAll && ((item.before > 0 && item.after === 0) || (item.deletions > 0 && item.insertions === 0))) {
           // Asset was deleted by git, can safely mark as deleted in DB
           WIKI.logger.info(`(STORAGE/GIT) Asset marked as deleted: ${item.relPath}`)
 
@@ -252,10 +304,13 @@ module.exports = {
     const filePath = path.join(this.repoPath, fileName)
     await fs.outputFile(filePath, page.injectMetadata(), 'utf8')
 
-    await this.git.add(`./${fileName}`)
-    await this.git.commit(`docs: create ${page.path}`, fileName, {
-      '--author': `"${page.authorName} <${page.authorEmail}>"`
-    })
+    const gitFilePath = `./${fileName}`
+    if ((await this.git.checkIgnore(gitFilePath)).length === 0) {
+      await this.git.add(gitFilePath)
+      await this.git.commit(`docs: create ${page.path}`, fileName, {
+        '--author': `"${page.authorName} <${page.authorEmail}>"`
+      })
+    }
   },
   /**
    * UPDATE
@@ -271,10 +326,13 @@ module.exports = {
     const filePath = path.join(this.repoPath, fileName)
     await fs.outputFile(filePath, page.injectMetadata(), 'utf8')
 
-    await this.git.add(`./${fileName}`)
-    await this.git.commit(`docs: update ${page.path}`, fileName, {
-      '--author': `"${page.authorName} <${page.authorEmail}>"`
-    })
+    const gitFilePath = `./${fileName}`
+    if ((await this.git.checkIgnore(gitFilePath)).length === 0) {
+      await this.git.add(gitFilePath)
+      await this.git.commit(`docs: update ${page.path}`, fileName, {
+        '--author': `"${page.authorName} <${page.authorEmail}>"`
+      })
+    }
   },
   /**
    * DELETE
@@ -288,10 +346,13 @@ module.exports = {
       fileName = `${page.localeCode}/${fileName}`
     }
 
-    await this.git.rm(`./${fileName}`)
-    await this.git.commit(`docs: delete ${page.path}`, fileName, {
-      '--author': `"${page.authorName} <${page.authorEmail}>"`
-    })
+    const gitFilePath = `./${fileName}`
+    if ((await this.git.checkIgnore(gitFilePath)).length === 0) {
+      await this.git.rm(gitFilePath)
+      await this.git.commit(`docs: delete ${page.path}`, fileName, {
+        '--author': `"${page.authorName} <${page.authorEmail}>"`
+      })
+    }
   },
   /**
    * RENAME
@@ -394,7 +455,8 @@ module.exports = {
               relPath,
               file,
               deletions: 0,
-              insertions: 0
+              insertions: 0,
+              importAll: true
             }], rootUser)
           }
           cb()
@@ -411,12 +473,15 @@ module.exports = {
 
     // -> Pages
     await pipeline(
-      WIKI.models.knex.column('path', 'localeCode', 'title', 'description', 'contentType', 'content', 'isPublished', 'updatedAt').select().from('pages').where({
+      WIKI.models.knex.column('id', 'path', 'localeCode', 'title', 'description', 'contentType', 'content', 'isPublished', 'updatedAt', 'createdAt', 'editorKey').select().from('pages').where({
         isPrivate: false
       }).stream(),
       new stream.Transform({
         objectMode: true,
         transform: async (page, enc, cb) => {
+          const pageObject = await WIKI.models.pages.query().findById(page.id)
+          page.tags = await pageObject.$relatedQuery('tags')
+
           let fileName = `${page.path}.${pageHelper.getFileExtension(page.contentType)}`
           if (WIKI.config.lang.namespacing && WIKI.config.lang.code !== page.localeCode) {
             fileName = `${page.localeCode}/${fileName}`

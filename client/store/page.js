@@ -14,6 +14,7 @@ const state = {
   tags: [],
   title: '',
   updatedAt: '',
+  editor: '',
   mode: '',
   scriptJs: '',
   scriptCss: '',
@@ -40,7 +41,16 @@ const state = {
       manage: false
     }
   },
-  commentsCount: 0
+  commentsCount: 0,
+  editShortcuts: {
+    editFab: false,
+    editMenuBar: false,
+    editMenuBtn: false,
+    editMenuExternalBtn: false,
+    editMenuExternalName: '',
+    editMenuExternalIcon: '',
+    editMenuExternalUrl: ''
+  }
 }
 
 export default {

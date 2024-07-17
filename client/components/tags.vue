@@ -49,7 +49,7 @@
           rounded
           single-line
           height='40'
-          prepend-icon='mdi-file-document-box-search-outline'
+          prepend-icon='mdi-text-box-search-outline'
           append-icon='mdi-arrow-right'
           clearable
         )
@@ -98,6 +98,7 @@
           :search='innerSearch'
           :loading='isLoading'
           :options.sync='pagination'
+          @page-count='pageTotal = $event'
           hide-default-footer
           ref='dude'
           )
@@ -183,6 +184,7 @@ export default {
         sortDesc: [false]
       },
       pages: [],
+      pageTotal: 0,
       isLoading: true,
       scrollStyle: {
         vuescroll: {},
@@ -214,9 +216,6 @@ export default {
     tagsSelected () {
       return _.filter(this.tags, t => _.includes(this.selection, t.tag))
     },
-    pageTotal () {
-      return Math.ceil(this.pages.length / this.pagination.itemsPerPage)
-    },
     orderByItems () {
       return [
         { text: this.$t('tags:orderByField.creationDate'), value: 'createdAt' },
@@ -243,13 +242,29 @@ export default {
   router,
   created () {
     this.$store.commit('page/SET_MODE', 'tags')
-    this.selection = _.compact(this.$route.path.split('/'))
+    this.selection = _.compact(decodeURI(this.$route.path).split('/'))
   },
   mounted () {
     this.locales = _.concat(
       [{name: this.$t('tags:localeAny'), code: 'any'}],
       (siteLangs.length > 0 ? siteLangs : [])
     )
+    if (this.$route.query.lang) {
+      this.locale = this.$route.query.lang
+    }
+    if (this.$route.query.sort) {
+      this.orderBy = this.$route.query.sort.toLowerCase()
+      switch (this.orderBy) {
+        case 'updatedat':
+          this.orderBy = 'updatedAt'
+          break
+      }
+      this.pagination.sortBy = [this.orderBy]
+    }
+    if (this.$route.query.dir) {
+      this.orderByDirection = this.$route.query.dir === 'asc' ? 0 : 1
+      this.pagination.sortDesc = [this.orderByDirection === 1]
+    }
   },
   methods: {
     toggleTag (tag) {

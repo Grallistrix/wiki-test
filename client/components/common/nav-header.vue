@@ -15,7 +15,7 @@
         prepend-inner-icon='mdi-magnify'
         :loading='searchIsLoading'
         @keyup.enter='searchEnter'
-        autocomplete='off'
+        autocomplete='none'
       )
     v-layout(row)
       v-flex(xs5, md4)
@@ -68,7 +68,7 @@
                 @blur='searchBlur'
                 @keyup.down='searchMove(`down`)'
                 @keyup.up='searchMove(`up`)'
-                autocomplete='off'
+                autocomplete='none'
               )
             v-tooltip(bottom)
               template(v-slot:activator='{ on }')
@@ -150,6 +150,9 @@
                 v-list-item.pl-4(@click='pageSource', v-if='mode !== `source` && hasReadSourcePermission')
                   v-list-item-avatar(size='24', tile): v-icon(color='indigo') mdi-code-tags
                   v-list-item-title.body-2 {{$t('common:header.viewSource')}}
+                v-list-item.pl-4(@click='pageConvert', v-if='hasWritePagesPermission')
+                  v-list-item-avatar(size='24', tile): v-icon(color='indigo') mdi-lightning-bolt
+                  v-list-item-title.body-2 {{$t('common:header.convert')}}
                 v-list-item.pl-4(@click='pageDuplicate', v-if='hasWritePagesPermission')
                   v-list-item-avatar(size='24', tile): v-icon(color='indigo') mdi-content-duplicate
                   v-list-item-title.body-2 {{$t('common:header.duplicate')}}
@@ -170,6 +173,19 @@
                 v-btn(icon, tile, height='64', v-on='on', @click='pageNew', :aria-label='$t(`common:header.newPage`)')
                   v-icon(color='grey') mdi-text-box-plus-outline
               span {{$t('common:header.newPage')}}
+            v-divider(vertical)
+
+          //- ADMIN
+
+          template(v-if='isAuthenticated && isAdmin')
+            v-tooltip(bottom, v-if='mode !== `admin`')
+              template(v-slot:activator='{ on }')
+                v-btn(icon, tile, height='64', v-on='on', href='/a', :aria-label='$t(`common:header.admin`)')
+                  v-icon(color='grey') mdi-cog
+              span {{$t('common:header.admin')}}
+            v-btn(v-else, text, tile, height='64', href='/', :aria-label='$t(`common:actions.exit`)')
+              v-icon(left, color='grey') mdi-exit-to-app
+              span {{$t('common:actions.exit')}}
             v-divider(vertical)
 
           //- ACCOUNT
@@ -210,9 +226,6 @@
                 v-list-item-action: v-icon(color='blue-grey') mdi-face-profile
                 v-list-item-content
                   v-list-item-title(:class='$vuetify.theme.dark ? `blue-grey--text text--lighten-3` : `blue-grey--text`') {{$t('common:header.profile')}}
-              v-list-item(href='/a', v-if='isAuthenticated && isAdmin')
-                v-list-item-action.btn-animate-rotate: v-icon(:color='$vuetify.theme.dark ? `blue-grey lighten-3` : `blue-grey`') mdi-cog
-                v-list-item-title(:class='$vuetify.theme.dark ? `blue-grey--text text--lighten-3` : `blue-grey--text`') {{$t('common:header.admin')}}
               v-list-item(@click='logout')
                 v-list-item-action: v-icon(color='red') mdi-logout
                 v-list-item-title.red--text {{$t('common:header.logout')}}
@@ -227,6 +240,7 @@
     page-selector(mode='move', v-model='movePageModal', :open-handler='pageMoveRename', :path='path', :locale='locale')
     page-selector(mode='create', v-model='duplicateOpts.modal', :open-handler='pageDuplicateHandle', :path='duplicateOpts.path', :locale='duplicateOpts.locale')
     page-delete(v-model='deletePageModal', v-if='path && path.length')
+    page-convert(v-model='convertPageModal', v-if='path && path.length')
 
     .nav-header-dev(v-if='isDevMode')
       v-icon mdi-alert
@@ -238,7 +252,6 @@
 <script>
 import { get, sync } from 'vuex-pathify'
 import _ from 'lodash'
-import Cookies from 'js-cookie'
 
 import movePageMutation from 'gql/common/common-pages-mutation-move.gql'
 
@@ -246,7 +259,8 @@ import movePageMutation from 'gql/common/common-pages-mutation-move.gql'
 
 export default {
   components: {
-    PageDelete: () => import('./page-delete.vue')
+    PageDelete: () => import('./page-delete.vue'),
+    PageConvert: () => import('./page-convert.vue')
   },
   props: {
     dense: {
@@ -265,6 +279,7 @@ export default {
       searchAdvMenuShown: false,
       newPageModal: false,
       movePageModal: false,
+      convertPageModal: false,
       deletePageModal: false,
       locales: siteLangs,
       isDevMode: false,
@@ -296,7 +311,7 @@ export default {
       if (this.pictureUrl && this.pictureUrl.length > 1) {
         return {
           kind: 'image',
-          url: this.pictureUrl
+          url: (this.pictureUrl === 'internal') ? `/_userav/${this.$store.get('user/id')}` : this.pictureUrl
         }
       } else {
         const nameParts = this.name.toUpperCase().split(' ')
@@ -344,6 +359,9 @@ export default {
     })
     this.$root.$on('pageMove', () => {
       this.pageMove()
+    })
+    this.$root.$on('pageConvert', () => {
+      this.pageConvert()
     })
     this.$root.$on('pageDuplicate', () => {
       this.pageDuplicate()
@@ -407,6 +425,9 @@ export default {
     pageDuplicateHandle ({ locale, path }) {
       window.location.assign(`/e/${locale}/${path}?from=${this.$store.get('page/id')}`)
     },
+    pageConvert () {
+      this.convertPageModal = true
+    },
     pageMove () {
       this.movePageModal = true
     },
@@ -452,8 +473,7 @@ export default {
       }
     },
     logout () {
-      Cookies.remove('jwt')
-      window.location.assign('/')
+      window.location.assign('/logout')
     },
     goHome () {
       window.location.assign('/')

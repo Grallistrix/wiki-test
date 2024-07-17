@@ -84,7 +84,10 @@ module.exports = {
             loader: 'sass-loader',
             options: {
               implementation: require('sass'),
-              sourceMap: false
+              sourceMap: false,
+              sassOptions: {
+                fiber: false
+              }
             }
           }
         ]
@@ -105,7 +108,10 @@ module.exports = {
             loader: 'sass-loader',
             options: {
               implementation: require('sass'),
-              sourceMap: false
+              sourceMap: false,
+              sassOptions: {
+                fiber: false
+              }
             }
           },
           {
@@ -162,10 +168,7 @@ module.exports = {
         ]
       },
       {
-        test: /\.(woff(2)?|ttf|eot|svg)(\?v=\d+\.\d+\.\d+)?$/,
-        exclude: [
-          path.join(process.cwd(), 'client')
-        ],
+        test: /\.(woff2|woff|ttf|eot)(\?v=\d+\.\d+\.\d+)?$/,
         use: [{
           loader: 'file-loader',
           options: {

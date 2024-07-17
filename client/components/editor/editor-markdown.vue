@@ -124,44 +124,19 @@
           span {{$t('editor:markup.insertAssets')}}
         v-tooltip(right, color='teal')
           template(v-slot:activator='{ on }')
-            v-btn.mt-3.animated.fadeInLeft.wait-p2s(icon, tile, v-on='on', dark, disabled, @click='toggleModal(`editorModalBlocks`)').mx-0
-              v-icon(:color='activeModal === `editorModalBlocks` ? `teal` : ``') mdi-view-dashboard-outline
-          span {{$t('editor:markup.insertBlock')}}
-        v-tooltip(right, color='teal')
-          template(v-slot:activator='{ on }')
-            v-btn.mt-3.animated.fadeInLeft.wait-p3s(icon, tile, v-on='on', dark, disabled).mx-0
-              v-icon mdi-code-braces
-          span {{$t('editor:markup.insertCodeBlock')}}
-        v-tooltip(right, color='teal')
-          template(v-slot:activator='{ on }')
-            v-btn.mt-3.animated.fadeInLeft.wait-p4s(icon, tile, v-on='on', dark, disabled).mx-0
-              v-icon mdi-movie
-          span {{$t('editor:markup.insertVideoAudio')}}
-        v-tooltip(right, color='teal')
-          template(v-slot:activator='{ on }')
-            v-btn.mt-3.animated.fadeInLeft.wait-p5s(icon, tile, v-on='on', dark, @click='toggleModal(`editorModalDrawio`)').mx-0
+            v-btn.mt-3.animated.fadeInLeft.wait-p2s(icon, tile, v-on='on', dark, @click='toggleModal(`editorModalDrawio`)').mx-0
               v-icon mdi-chart-multiline
           span {{$t('editor:markup.insertDiagram')}}
-        v-tooltip(right, color='teal')
-          template(v-slot:activator='{ on }')
-            v-btn.mt-3.animated.fadeInLeft.wait-p6s(icon, tile, v-on='on', dark, disabled).mx-0
-              v-icon mdi-function-variant
-          span {{$t('editor:markup.insertMathExpression')}}
-        v-tooltip(right, color='teal')
-          template(v-slot:activator='{ on }')
-            v-btn.mt-3.animated.fadeInLeft.wait-p7s(icon, tile, v-on='on', dark, disabled).mx-0
-              v-icon mdi-table-plus
-          span {{$t('editor:markup.tableHelper')}}
         template(v-if='$vuetify.breakpoint.mdAndUp')
           v-spacer
           v-tooltip(right, color='teal')
             template(v-slot:activator='{ on }')
-              v-btn.mt-3.animated.fadeInLeft.wait-p8s(icon, tile, v-on='on', dark, @click='toggleFullscreen').mx-0
+              v-btn.mt-3.animated.fadeInLeft.wait-p3s(icon, tile, v-on='on', dark, @click='toggleFullscreen').mx-0
                 v-icon mdi-arrow-expand-all
             span {{$t('editor:markup.distractionFreeMode')}}
           v-tooltip(right, color='teal')
             template(v-slot:activator='{ on }')
-              v-btn.mt-3.animated.fadeInLeft.wait-p9s(icon, tile, v-on='on', dark, @click='toggleHelp').mx-0
+              v-btn.mt-3.animated.fadeInLeft.wait-p4s(icon, tile, v-on='on', dark, @click='toggleHelp').mx-0
                 v-icon(:color='helpShown ? `teal` : ``') mdi-help-circle
             span {{$t('editor:markup.markdownFormattingHelp')}}
       .editor-markdown-editor
@@ -220,12 +195,12 @@ import 'codemirror/addon/hint/show-hint.js'
 import 'codemirror/addon/fold/foldcode.js'
 import 'codemirror/addon/fold/foldgutter.js'
 import 'codemirror/addon/fold/foldgutter.css'
-import './markdown/fold'
 
 // Markdown-it
 import MarkdownIt from 'markdown-it'
 import mdAttrs from 'markdown-it-attrs'
-import mdEmoji from 'markdown-it-emoji'
+import mdDecorate from 'markdown-it-decorate'
+import { full as mdEmoji } from 'markdown-it-emoji'
 import mdTaskLists from 'markdown-it-task-lists'
 import mdExpandTabs from 'markdown-it-expand-tabs'
 import mdAbbr from 'markdown-it-abbr'
@@ -250,6 +225,7 @@ import mermaid from 'mermaid'
 // Helpers
 import katexHelper from './common/katex'
 import tabsetHelper from './markdown/tabset'
+import cmFold from './common/cmFold'
 
 // ========================================
 // INIT
@@ -288,17 +264,33 @@ const md = new MarkdownIt({
   .use(mdAttrs, {
     allowedAttributes: ['id', 'class', 'target']
   })
+  .use(mdDecorate)
   .use(underline)
   .use(mdEmoji)
-  .use(mdTaskLists, {label: true, labelAfter: true})
+  .use(mdTaskLists, { label: false, labelAfter: false })
   .use(mdExpandTabs)
   .use(mdAbbr)
   .use(mdSup)
   .use(mdSub)
-  .use(mdMultiTable, {multiline: true, rowspan: true, headerless: true})
+  .use(mdMultiTable, { multiline: true, rowspan: true, headerless: true })
   .use(mdMark)
   .use(mdFootnote)
   .use(mdImsize)
+
+// DOMPurify fix for draw.io
+DOMPurify.addHook('uponSanitizeElement', (elm) => {
+  if (elm.querySelectorAll) {
+    const breaks = elm.querySelectorAll('foreignObject br, foreignObject p')
+    if (breaks && breaks.length) {
+      for (let i = 0; i < breaks.length; i++) {
+        breaks[i].parentNode.replaceChild(
+          document.createElement('div'),
+          breaks[i]
+        )
+      }
+    }
+  }
+})
 
 // ========================================
 // HELPER FUNCTIONS
@@ -320,6 +312,7 @@ md.renderer.rules.paragraph_open = injectLineNumbers
 md.renderer.rules.heading_open = injectLineNumbers
 md.renderer.rules.blockquote_open = injectLineNumbers
 
+cmFold.register('markdown')
 // ========================================
 // PLANTUML
 // ========================================
@@ -331,11 +324,12 @@ plantuml.init(md, {})
 // KATEX
 // ========================================
 
+const macros = {}
 md.inline.ruler.after('escape', 'katex_inline', katexHelper.katexInline)
 md.renderer.rules.katex_inline = (tokens, idx) => {
   try {
     return katex.renderToString(tokens[idx].content, {
-      displayMode: false
+      displayMode: false, macros
     })
   } catch (err) {
     console.warn(err)
@@ -348,7 +342,7 @@ md.block.ruler.after('blockquote', 'katex_block', katexHelper.katexBlock, {
 md.renderer.rules.katex_block = (tokens, idx) => {
   try {
     return `<p>` + katex.renderToString(tokens[idx].content, {
-      displayMode: true
+      displayMode: true, macros
     }) + `</p>`
   } catch (err) {
     console.warn(err)
@@ -436,17 +430,8 @@ export default {
       this.helpShown = false
     },
     onCmInput: _.debounce(function (newContent) {
-      linesMap = []
-      this.$store.set('editor/content', newContent)
-      this.previewHTML = DOMPurify.sanitize(md.render(newContent))
-      this.$nextTick(() => {
-        tabsetHelper.format()
-        this.renderMermaidDiagrams()
-        Prism.highlightAllUnder(this.$refs.editorPreview)
-        Array.from(this.$refs.editorPreview.querySelectorAll('pre.line-numbers')).forEach(pre => pre.classList.add('prismjs'))
-        this.scrollSync(this.cm)
-      })
-    }, 500),
+      this.processContent(newContent)
+    }, 600),
     onCmPaste (cm, ev) {
       // const clipItems = (ev.clipboardData || ev.originalEvent.clipboardData).items
       // for (let clipItem of clipItems) {
@@ -463,6 +448,21 @@ export default {
       //     reader.readAsDataURL(file)
       //   }
       // }
+    },
+    processContent (newContent) {
+      linesMap = []
+      // this.$store.set('editor/content', newContent)
+      this.processMarkers(this.cm.firstLine(), this.cm.lastLine())
+      this.previewHTML = DOMPurify.sanitize(md.render(newContent), {
+        ADD_TAGS: ['foreignObject']
+      })
+      this.$nextTick(() => {
+        tabsetHelper.format()
+        this.renderMermaidDiagrams()
+        Prism.highlightAllUnder(this.$refs.editorPreview)
+        Array.from(this.$refs.editorPreview.querySelectorAll('pre.line-numbers')).forEach(pre => pre.classList.add('prismjs'))
+        this.scrollSync(this.cm)
+      })
     },
     /**
      * Update cursor state
@@ -605,6 +605,8 @@ export default {
           cm.showHint({
             hint: async (cm, options) => {
               const cur = cm.getCursor()
+              const curLine = cm.getLine(cur.line).substring(0, cur.ch)
+              const queryString = curLine.substring(curLine.lastIndexOf('[') + 1, curLine.length - 2)
               const token = cm.getTokenAt(cur)
               try {
                 const respRaw = await this.$apollo.query({
@@ -623,7 +625,7 @@ export default {
                     }
                   `,
                   variables: {
-                    query: token.string,
+                    query: queryString,
                     locale: this.locale
                   },
                   fetchPolicy: 'cache-first'
@@ -632,7 +634,7 @@ export default {
                 if (resp && resp.totalHits > 0) {
                   return {
                     list: resp.results.map(r => ({
-                      text: (siteLangs.length > 0 ? `/${r.locale}/${r.path}` : `/${r.path}`) + ')',
+                      text: '(' + (siteLangs.length > 0 ? `/${r.locale}/${r.path}` : `/${r.path}`) + ')',
                       displayText: siteLangs.length > 0 ? `/${r.locale}/${r.path} - ${r.title}` : `/${r.path} - ${r.title}`
                     })),
                     from: CodeMirror.Pos(cur.line, token.start),
@@ -658,6 +660,67 @@ export default {
       this.insertAtCursor({
         content: siteLangs.length > 0 ? `[${lastPart}](/${locale}/${path})` : `[${lastPart}](/${path})`
       })
+    },
+    processMarkers (from, to) {
+      let found = null
+      let foundStart = 0
+      this.cm.doc.getAllMarks().forEach(mk => {
+        if (mk.__kind) {
+          mk.clear()
+        }
+      })
+      this.cm.eachLine(from, to, ln => {
+        const line = ln.lineNo()
+        if (ln.text.startsWith('```diagram')) {
+          found = 'diagram'
+          foundStart = line
+        } else if (ln.text === '```' && found) {
+          switch (found) {
+            // ------------------------------
+            // -> DIAGRAM
+            // ------------------------------
+            case 'diagram': {
+              if (line - foundStart !== 2) {
+                return
+              }
+              this.addMarker({
+                kind: 'diagram',
+                from: { line: foundStart, ch: 3 },
+                to: { line: foundStart, ch: 10 },
+                text: 'Edit Diagram',
+                action: ((start, end) => {
+                  return (ev) => {
+                    this.cm.doc.setSelection({ line: start, ch: 0 }, { line: end, ch: 3 })
+                    try {
+                      const raw = this.cm.doc.getLine(end - 1)
+                      this.$store.set('editor/activeModalData', Buffer.from(raw, 'base64').toString())
+                      this.toggleModal(`editorModalDrawio`)
+                    } catch (err) {
+                      return this.$store.commit('showNotification', {
+                        message: 'Failed to process diagram data.',
+                        style: 'warning',
+                        icon: 'warning'
+                      })
+                    }
+                  }
+                })(foundStart, line)
+              })
+              if (ln.height > 0) {
+                this.cm.foldCode(foundStart)
+              }
+              break
+            }
+          }
+          found = null
+        }
+      })
+    },
+    addMarker ({ kind, from, to, text, action }) {
+      const markerElm = document.createElement('span')
+      markerElm.appendChild(document.createTextNode(text))
+      markerElm.className = 'CodeMirror-buttonmarker'
+      markerElm.addEventListener('click', action)
+      this.cm.markText(from, to, { replacedWith: markerElm, __kind: kind })
     }
   },
   mounted() {
@@ -755,7 +818,7 @@ export default {
 
     // Render initial preview
 
-    this.onCmInput(this.$store.get('editor/content'))
+    this.processContent(this.$store.get('editor/content'))
     this.refresh()
 
     this.$root.$on('editorInsert', opts => {
@@ -775,11 +838,10 @@ export default {
           })
           break
         case 'DIAGRAM':
-          const foldLine = this.cm.getCursor().line
-          this.insertAtCursor({
-            content: '```diagram\n' + opts.text + '\n```'
-          })
-          this.cm.foldCode(foldLine)
+          const selStartLine = this.cm.getCursor('from').line
+          const selEndLine = this.cm.getCursor('to').line + 1
+          this.cm.doc.replaceSelection('```diagram\n' + opts.text + '\n```\n', 'start')
+          this.processMarkers(selStartLine, selEndLine)
           break
       }
     })

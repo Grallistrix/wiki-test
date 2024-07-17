@@ -57,6 +57,16 @@
                       :hint='$t(`admin:mail.smtpPortHint`)'
                       style='max-width: 300px;'
                       )
+                    v-text-field(
+                      outlined
+                      v-model='config.name'
+                      :label='$t(`admin:mail.smtpName`)'
+                      required
+                      :counter='255'
+                      prepend-icon='mdi-server'
+                      persistent-hint
+                      :hint='$t(`admin:mail.smtpNameHint`)'
+                      )
                     v-switch(
                       v-model='config.secure'
                       :label='$t(`admin:mail.smtpTLS`)'
@@ -169,6 +179,7 @@ export default {
         senderEmail: '',
         host: '',
         port: 0,
+        name: '',
         secure: false,
         verifySSL: false,
         user: '',
@@ -192,6 +203,7 @@ export default {
             senderEmail: this.config.senderEmail || '',
             host: this.config.host || '',
             port: _.toSafeInteger(this.config.port) || 0,
+            name: this.config.name || '',
             secure: this.config.secure || false,
             verifySSL: this.config.verifySSL || false,
             user: this.config.user || '',
@@ -226,7 +238,7 @@ export default {
           }
         })
         if (!_.get(resp, 'data.mail.sendTest.responseResult.succeeded', false)) {
-          throw new Error(_.get(resp, 'data.mail.sendTest.responseResult.message', 'An unexpected error occured.'))
+          throw new Error(_.get(resp, 'data.mail.sendTest.responseResult.message', 'An unexpected error occurred.'))
         }
 
         this.testEmail = ''

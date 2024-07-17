@@ -55,48 +55,44 @@
               v-card.mt-3.animated.fadeInUp.wait-p1s
                 v-toolbar(color='primary', dark, dense, flat)
                   v-toolbar-title.subtitle-1 {{$t(`admin:theme.options`)}}
-                  v-spacer
-                  v-chip(label, color='white', small).primary--text coming soon
                 v-card-text
                   v-select(
-                    :items='[]'
+                    :items='tocPositions'
                     outlined
                     prepend-icon='mdi-border-vertical'
-                    v-model='config.iconset'
+                    v-model='config.tocPosition'
                     label='Table of Contents Position'
                     persistent-hint
                     hint='Select whether the table of contents is shown on the left, right or not at all.'
-                    disabled
                     )
-
             v-flex(lg6 xs12)
-              v-card.animated.fadeInUp.wait-p2s
-                v-toolbar(color='teal', dark, dense, flat)
-                  v-toolbar-title.subtitle-1 {{$t('admin:theme.downloadThemes')}}
-                  v-spacer
-                  v-chip(label, color='white', small).teal--text coming soon
-                v-data-table(
-                  :headers='headers',
-                  :items='themes',
-                  hide-default-footer,
-                  item-key='value',
-                  :items-per-page='1000'
-                )
-                  template(v-slot:item='thm')
-                    td
-                      strong {{thm.item.text}}
-                    td
-                      span {{ thm.item.author }}
-                    td.text-xs-center
-                      v-progress-circular(v-if='thm.item.isDownloading', indeterminate, color='blue', size='20', :width='2')
-                      v-btn(v-else-if='thm.item.isInstalled && thm.item.installDate < thm.item.updatedAt', icon)
-                        v-icon.blue--text mdi-cached
-                      v-btn(v-else-if='thm.item.isInstalled', icon)
-                        v-icon.green--text mdi-check-bold
-                      v-btn(v-else, icon)
-                        v-icon.grey--text mdi-cloud-download
+              //- v-card.animated.fadeInUp.wait-p2s
+              //-   v-toolbar(color='teal', dark, dense, flat)
+              //-     v-toolbar-title.subtitle-1 {{$t('admin:theme.downloadThemes')}}
+              //-     v-spacer
+              //-     v-chip(label, color='white', small).teal--text coming soon
+              //-   v-data-table(
+              //-     :headers='headers',
+              //-     :items='themes',
+              //-     hide-default-footer,
+              //-     item-key='value',
+              //-     :items-per-page='1000'
+              //-   )
+              //-     template(v-slot:item='thm')
+              //-       td
+              //-         strong {{thm.item.text}}
+              //-       td
+              //-         span {{ thm.item.author }}
+              //-       td.text-xs-center
+              //-         v-progress-circular(v-if='thm.item.isDownloading', indeterminate, color='blue', size='20', :width='2')
+              //-         v-btn(v-else-if='thm.item.isInstalled && thm.item.installDate < thm.item.updatedAt', icon)
+              //-           v-icon.blue--text mdi-cached
+              //-         v-btn(v-else-if='thm.item.isInstalled', icon)
+              //-           v-icon.green--text mdi-check-bold
+              //-         v-btn(v-else, icon)
+              //-           v-icon.grey--text mdi-cloud-download
 
-              v-card.mt-3.animated.fadeInUp.wait-p2s
+              v-card.animated.fadeInUp.wait-p2s
                 v-toolbar(color='primary', dark, dense, flat)
                   v-toolbar-title.subtitle-1 {{$t(`admin:theme.codeInjection`)}}
                 v-card-text
@@ -155,6 +151,7 @@ export default {
         theme: 'default',
         darkMode: false,
         iconset: '',
+        tocPosition: 'left',
         injectCSS: '',
         injectHead: '',
         injectBody: ''
@@ -184,6 +181,13 @@ export default {
           width: 100
         }
       ]
+    },
+    tocPositions () {
+      return [
+        { text: 'Left (default)', value: 'left' },
+        { text: 'Right', value: 'right' },
+        { text: 'Hidden', value: 'off' }
+      ]
     }
   },
   watch: {
@@ -209,6 +213,7 @@ export default {
             theme: this.config.theme,
             iconset: this.config.iconset,
             darkMode: this.darkMode,
+            tocPosition: this.config.tocPosition,
             injectCSS: this.config.injectCSS,
             injectHead: this.config.injectHead,
             injectBody: this.config.injectBody

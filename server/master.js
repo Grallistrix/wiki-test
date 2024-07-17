@@ -26,8 +26,8 @@ module.exports = async () => {
   // Load middlewares
   // ----------------------------------------
 
-  var mw = autoload(path.join(WIKI.SERVERPATH, '/middlewares'))
-  var ctrl = autoload(path.join(WIKI.SERVERPATH, '/controllers'))
+  const mw = autoload(path.join(WIKI.SERVERPATH, '/middlewares'))
+  const ctrl = autoload(path.join(WIKI.SERVERPATH, '/controllers'))
 
   // ----------------------------------------
   // Define Express App
@@ -42,8 +42,8 @@ module.exports = async () => {
   // ----------------------------------------
 
   app.use(mw.security)
-  app.use(cors(WIKI.config.cors))
-  app.options('*', cors(WIKI.config.cors))
+  app.use(cors({ origin: false }))
+  app.options('*', cors({ origin: false }))
   if (WIKI.config.security.securityTrustProxy) {
     app.enable('trust proxy')
   }
@@ -91,7 +91,7 @@ module.exports = async () => {
   // GraphQL Server
   // ----------------------------------------
 
-  app.use(bodyParser.json({ limit: '1mb' }))
+  app.use(bodyParser.json({ limit: WIKI.config.bodyParserLimit || '1mb' }))
   await WIKI.servers.startGraphQL()
 
   // ----------------------------------------
@@ -149,10 +149,12 @@ module.exports = async () => {
       title: WIKI.config.title,
       theme: WIKI.config.theming.theme,
       darkMode: WIKI.config.theming.darkMode,
+      tocPosition: WIKI.config.theming.tocPosition || 'left',
       lang: WIKI.config.lang.code,
       rtl: WIKI.config.lang.rtl,
       company: WIKI.config.company,
       contentLicense: WIKI.config.contentLicense,
+      footerOverride: WIKI.config.footerOverride,
       logoUrl: WIKI.config.logoUrl
     }
     res.locals.langs = await WIKI.models.locales.getNavLocales({ cache: true })
@@ -169,7 +171,7 @@ module.exports = async () => {
   // ----------------------------------------
 
   app.use((req, res, next) => {
-    var err = new Error('Not Found')
+    const err = new Error('Not Found')
     err.status = 404
     next(err)
   })

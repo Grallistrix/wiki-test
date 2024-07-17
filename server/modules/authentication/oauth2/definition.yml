@@ -1,9 +1,9 @@
 key: oauth2
 title: Generic OAuth2
-description: OAuth 2 is an authorization framework that enables applications to obtain limited access to user accounts on an HTTP service.
+description: OAuth 2.0 is the industry-standard protocol for authorization.
 author: requarks.io
 logo: https://static.requarks.io/logo/oauth2.svg
-color: grey darken-4
+color: blue-grey darken-2
 website: https://oauth.net/2/
 isAvailable: true
 useForm: false
@@ -21,38 +21,71 @@ props:
   authorizationURL:
     type: String
     title: Authorization Endpoint URL
-    hint: The full URL to the authorization endpoint, used to get an authorization code.
+    hint: Application Authorization Endpoint URL
     order: 3
   tokenURL:
     type: String
     title: Token Endpoint URL
-    hint: The full URL to the token endpoint, used to get an access token.
+    hint: Application Token Endpoint URL
     order: 4
-  mappingUID:
-    title: Unique ID Field Mapping
+  userInfoURL:
     type: String
-    default: 'id'
-    hint: The field storing the user unique identifier, e.g. "id" or "_id".
-    maxWidth: 500
-    order: 20
-  mappingEmail:
-    title: Email Field Mapping
+    title: User Info Endpoint URL
+    hint: User Info Endpoint URL
+    order: 5
+  userIdClaim:
     type: String
-    default: 'email'
-    hint: The field storing the user email, e.g. "email" or "mail".
+    title: ID Claim
+    hint: Field containing the user ID
+    default: id
     maxWidth: 500
-    order: 21
-  mappingDisplayName:
-    title: Display Name Field Mapping
+    order: 6
+  displayNameClaim:
     type: String
-    default: 'name'
-    hint: The field storing the user display name, e.g. "name", "displayName" or "username".
+    title: Display Name Claim
+    hint: Field containing user display name
+    default: displayName
     maxWidth: 500
-    order: 22
-  mappingPicture:
-    title: Avatar Picture Field Mapping
+    order: 7
+  emailClaim:
     type: String
-    default: 'pictureUrl'
-    hint: The field storing the user avatar picture, e.g. "pictureUrl" or "avatarUrl".
+    title: Email Claim
+    hint: Field containing the user email address
+    default: email
     maxWidth: 500
-    order: 23
+    order: 8
+  mapGroups:
+    type: Boolean
+    title: Map Groups
+    hint: Map groups matching names from the groups claim value
+    default: false
+    order: 9
+  groupsClaim:
+    type: String
+    title: Groups Claim
+    hint: Field containing the group names
+    default: groups
+    maxWidth: 500
+    order: 10
+  logoutURL:
+    type: String
+    title: Logout URL
+    hint: (optional) Logout URL on the OAuth2 provider where the user will be redirected to complete the logout process.
+    order: 11
+  scope:
+    type: String
+    title: Scope
+    hint: (optional) Application Client permission scopes.
+    order: 12
+  useQueryStringForAccessToken:
+    type: Boolean
+    default: false
+    title: Pass access token via GET query string to User Info Endpoint
+    hint: (optional) Pass the access token in an `access_token` parameter attached to the GET query string of the User Info Endpoint URL. Otherwise the access token will be passed in the Authorization header.
+    order: 13
+  enableCSRFProtection:
+    type: Boolean
+    default: true
+    title: Enable CSRF protection
+    hint: Pass a nonce state parameter during authentication to protect against CSRF attacks.
+    order: 14

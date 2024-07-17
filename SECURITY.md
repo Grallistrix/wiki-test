@@ -13,7 +13,15 @@ If you find such vulnerability, it's important to disclose it in a quick and sec
 
 ## Reporting a Vulnerability
 
-**DO NOT CREATE AN ISSUE ON GITHUB** to report a potential vulnerability / security problem. Instead, send an email to security@requarks.io.
+**DO NOT CREATE A GITHUB ISSUE / DISCUSSION** to report a potential vulnerability / security problem. Instead, choose one of these options:
+
+### A) Submit a Vulnerability Report *(recommended)*
+
+Fill in the form on https://github.com/requarks/wiki/security/advisories/new
+
+### B) Send an email
+
+Send an email to security@requarks.io.
 
 Include as much details as possible, such as:
 - The version(s) of Wiki.js that are impacted
